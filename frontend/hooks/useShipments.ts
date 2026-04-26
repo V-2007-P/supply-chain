@@ -1,0 +1,140 @@
+import { useState, useEffect } from 'react';
+
+export interface Stop {
+  lat: number;
+  lng: number;
+  name: string;
+  type: string;
+}
+
+export interface Shipment {
+  id: string;
+  source: string;
+  destination: string;
+  status: string;
+  risk: "Low" | "Medium" | "High";
+  eta: string;
+  delayReason: string | null;
+  route: Stop[];
+  suggestedRoute?: Stop[] | null;
+  currentLocation?: { lat: number; lng: number };
+  delaySegment?: { startIdx: number; endIdx: number; reason: string; type: string };
+}
+
+const INITIAL_SHIPMENTS: Shipment[] = [
+  {
+    id: "SHP101",
+    source: "Delhi",
+    destination: "Patna",
+    status: "In Transit",
+    risk: "High",
+    eta: "Delayed (+2h)",
+    delayReason: "Heavy traffic on NH19",
+    currentLocation: { lat: 26.5000, lng: 80.5000 },
+    delaySegment: { startIdx: 0, endIdx: 1, reason: "Traffic Congestion", type: "traffic" },
+    route: [
+      { lat: 28.6139, lng: 77.2090, name: "Delhi Hub", type: "Origin" },
+      { lat: 25.3176, lng: 82.9739, name: "Varanasi Transit", type: "Transit" },
+      { lat: 25.5941, lng: 85.1376, name: "Patna Delivery", type: "Destination" }
+    ]
+  },
+  {
+    id: "SHP102",
+    source: "Mumbai",
+    destination: "Pune",
+    status: "In Transit",
+    risk: "Medium",
+    eta: "Today, 6:00 PM",
+    delayReason: "Light rain near Lonavala",
+    currentLocation: { lat: 18.7500, lng: 73.4000 },
+    route: [
+      { lat: 19.0760, lng: 72.8777, name: "Mumbai Hub", type: "Origin" },
+      { lat: 18.7500, lng: 73.4000, name: "Lonavala Checkpoint", type: "Transit" },
+      { lat: 18.5204, lng: 73.8567, name: "Pune Delivery", type: "Destination" }
+    ]
+  },
+  {
+    id: "SHP103",
+    source: "Bangalore",
+    destination: "Chennai",
+    status: "In Transit",
+    risk: "Low",
+    eta: "Tomorrow, 10:00 AM",
+    delayReason: null,
+    currentLocation: { lat: 12.9716, lng: 77.5946 },
+    route: [
+      { lat: 12.9716, lng: 77.5946, name: "Bangalore Hub", type: "Origin" },
+      { lat: 13.0827, lng: 80.2707, name: "Chennai Hub", type: "Destination" }
+    ]
+  },
+  {
+    id: "SHP104",
+    source: "Kolkata",
+    destination: "Guwahati",
+    status: "In Transit",
+    risk: "High",
+    eta: "Delayed (+1 Day)",
+    delayReason: "Landslide near Siliguri",
+    currentLocation: { lat: 26.7271, lng: 88.3953 },
+    delaySegment: { startIdx: 0, endIdx: 1, reason: "Road Blocked", type: "weather" },
+    route: [
+      { lat: 22.5726, lng: 88.3639, name: "Kolkata Hub", type: "Origin" },
+      { lat: 26.7271, lng: 88.3953, name: "Siliguri Transit", type: "Transit" },
+      { lat: 26.1445, lng: 91.7362, name: "Guwahati Hub", type: "Destination" }
+    ]
+  },
+  {
+    id: "SHP105",
+    source: "Hyderabad",
+    destination: "Nagpur",
+    status: "In Transit",
+    risk: "Low",
+    eta: "Today, 11:30 PM",
+    delayReason: null,
+    currentLocation: { lat: 19.5000, lng: 78.5000 },
+    route: [
+      { lat: 17.3850, lng: 78.4867, name: "Hyderabad Hub", type: "Origin" },
+      { lat: 21.1458, lng: 79.0882, name: "Nagpur Hub", type: "Destination" }
+    ]
+  }
+];
+
+export function useShipments() {
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('ops_shipments');
+    if (stored) {
+      setShipments(JSON.parse(stored));
+    } else {
+      setShipments(INITIAL_SHIPMENTS);
+      localStorage.setItem('ops_shipments', JSON.stringify(INITIAL_SHIPMENTS));
+    }
+    setMounted(true);
+  }, []);
+
+  const updateShipmentRoute = (id: string, newRoute: Stop[], newRisk: "Low" | "Medium" | "High", newDelayReason: string | null, newEta: string) => {
+    const updated = shipments.map(s => {
+      if (s.id === id) {
+        return {
+          ...s,
+          route: newRoute,
+          suggestedRoute: null,
+          risk: newRisk,
+          delayReason: newDelayReason,
+          eta: newEta,
+          delaySegment: undefined // Remove delay highlight after optimization
+        };
+      }
+      return s;
+    });
+    setShipments(updated);
+    localStorage.setItem('ops_shipments', JSON.stringify(updated));
+    
+    // Also dispatch event so other tabs/components update
+    window.dispatchEvent(new Event('shipments_updated'));
+  };
+
+  return { shipments, updateShipmentRoute, mounted };
+}
