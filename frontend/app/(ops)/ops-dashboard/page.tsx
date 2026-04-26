@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Bell, Activity, Truck, AlertTriangle, CheckCircle2, Clock, BrainCircuit, X, MapPin, CloudRain, Sun, Wind, CloudLightning } from "lucide-react";
 import { useShipments, Shipment, Stop } from "@/hooks/useShipments";
 import { useShipmentContext } from "@/hooks/useWeather";
+import { useLogisticsData } from "@/hooks/useLogisticsData";
 
 // Dynamically load Map to prevent SSR issues
 const OpsMap = dynamic(() => import('@/components/ops/OpsMap'), {
@@ -17,6 +18,7 @@ export default function OpsDashboard() {
   const router = useRouter();
   const { shipments, updateShipmentRoute, mounted } = useShipments();
   const { contexts } = useShipmentContext(shipments);
+  const { insights, loading: dataLoading, getRiskLevel, getInsightMessage } = useLogisticsData();
   const [focusedShipment, setFocusedShipment] = useState<Shipment | null>(null);
 
   // AI State
@@ -32,22 +34,52 @@ export default function OpsDashboard() {
 
   if (!mounted) return null;
 
-  const totalShipments = shipments.length;
-  const highRisk = shipments.filter(s => s.risk === "High").length;
-  const delayed = shipments.filter(s => s.eta.includes("Delayed")).length;
-  const active = shipments.filter(s => s.status === "In Transit").length;
+  const calculateRouteDistance = (route: Stop[]) => {
+    let dist = 0;
+    const p = 0.017453292519943295;
+    const c = Math.cos;
+    for (let i = 0; i < route.length - 1; i++) {
+      const lat1 = route[i].lat, lon1 = route[i].lng;
+      const lat2 = route[i+1].lat, lon2 = route[i+1].lng;
+      const a = 0.5 - c((lat2 - lat1) * p)/2 + c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p))/2;
+      dist += 12742 * Math.asin(Math.sqrt(a));
+    }
+    return dist;
+  };
+
+  const getShipmentRisk = (shipment: Shipment) => {
+    if (!contexts[shipment.id] || !insights) return shipment.risk;
+    const weather = contexts[shipment.id].weather?.condition || "Clear";
+    const dist = calculateRouteDistance(shipment.route);
+    return getRiskLevel(weather, dist, "truck");
+  };
+
+  // Override shipments with dataset-driven risk
+  const enrichedShipments = shipments.map(s => ({
+    ...s,
+    risk: getShipmentRisk(s) as "Low" | "Medium" | "High"
+  }));
+
+  const totalShipments = enrichedShipments.length;
+  const highRisk = enrichedShipments.filter(s => s.risk === "High").length;
+  const delayed = enrichedShipments.filter(s => s.eta.includes("Delayed")).length;
+  const active = enrichedShipments.filter(s => s.status === "In Transit").length;
 
   const analyzeWithAI = async (shipment: Shipment) => {
     setIsAnalyzing(true);
     setAiAnalysis(null);
     try {
       const context = contexts[shipment.id];
+      const dist = calculateRouteDistance(shipment.route);
+      const datasetInsight = getInsightMessage(context?.weather?.condition || 'Clear', dist, 'truck');
+
       const prompt = `
         Analyze this logistics route using weather and traffic conditions.
         Route: ${shipment.route.map(r => r.name).join(" -> ")}
         Weather: ${context?.weather?.condition || 'Unknown'} (${context?.weather?.temp || 0}°C)
         Traffic: ${context?.traffic || 'Unknown'}
         Delay Reason: ${shipment.delayReason || 'None'}
+        Historical Insight: ${datasetInsight}
         
         Predict risk level (Low/Medium/High), explain the reason, and suggest an optimized alternate route.
         Return ONLY valid JSON in this exact format:
@@ -194,10 +226,39 @@ export default function OpsDashboard() {
           </div>
         </div>
 
+        {/* Dataset Insights Panel */}
+        {insights && !dataLoading && (
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-5 mb-6">
+            <h3 className="font-bold text-lg text-slate-900 mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-500" /> Data-Driven Insights (Historical)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                <p className="text-sm font-bold text-slate-700">Weather Impact</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Deliveries in <span className="font-bold text-blue-600">Rainy</span> weather have a <span className="font-bold text-blue-600">{(insights.delayByWeather['rainy'] || 0).toFixed(0)}%</span> higher delay probability compared to Clear weather ({(insights.delayByWeather['clear'] || 0).toFixed(0)}%).
+                </p>
+              </div>
+              <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-100">
+                <p className="text-sm font-bold text-slate-700">Distance Risk</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  <span className="font-bold text-amber-600">Long distance</span> shipments ({'>'}200km) show a <span className="font-bold text-amber-600">{(insights.delayByDistance['Long (> 200km)'] || 0).toFixed(0)}%</span> delay probability, making them high risk.
+                </p>
+              </div>
+              <div className="bg-green-50/50 rounded-xl p-4 border border-green-100">
+                <p className="text-sm font-bold text-slate-700">Vehicle Type</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  <span className="font-bold text-green-600">Truck</span> deliveries see delays {(insights.delayByVehicle['truck'] || 0).toFixed(0)}% of the time, compared to Bike at {(insights.delayByVehicle['bike'] || 0).toFixed(0)}%.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Map & Alerts Split */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col p-2 h-full">
-            <OpsMap shipments={shipments} focusedShipmentId={focusedShipment?.id || null} contexts={contexts} />
+            <OpsMap shipments={enrichedShipments} focusedShipmentId={focusedShipment?.id || null} contexts={contexts} />
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-5 flex flex-col h-[500px] overflow-hidden">
@@ -205,7 +266,7 @@ export default function OpsDashboard() {
               <Bell className="w-5 h-5 text-brand-orange" /> Real-Time Alerts
             </h3>
             <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-              {shipments.filter(s => s.delayReason).map((s, i) => (
+              {enrichedShipments.filter(s => s.delayReason).map((s, i) => (
                 <div key={i} className={`p-4 rounded-xl border ${s.risk === 'High' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'} animate-in fade-in slide-in-from-right-4`}>
                   <div className="flex gap-3">
                     <AlertTriangle className={`w-5 h-5 shrink-0 ${s.risk === 'High' ? 'text-red-500' : 'text-amber-500'}`} />
@@ -245,7 +306,7 @@ export default function OpsDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {shipments.map(s => (
+                {enrichedShipments.map(s => (
                   <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-black text-slate-900">{s.id}</td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-600">
@@ -345,6 +406,20 @@ export default function OpsDashboard() {
                     <div>
                       <p className="text-xs text-slate-500 mb-1">ETA</p>
                       <p className="font-bold text-slate-900">{focusedShipment.eta}</p>
+                    </div>
+
+                    {/* Dataset Insight */}
+                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mt-2">
+                      <p className="text-xs font-bold text-blue-800 mb-1 flex items-center gap-1">
+                        <Activity className="w-3 h-3" /> Dataset Insight
+                      </p>
+                      <p className="text-xs text-blue-700 font-medium">
+                        {getInsightMessage(
+                          contexts[focusedShipment.id]?.weather?.condition || "Clear",
+                          calculateRouteDistance(focusedShipment.route),
+                          "truck"
+                        )}
+                      </p>
                     </div>
                   </div>
                 </div>
