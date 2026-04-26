@@ -18,7 +18,7 @@ export default function OpsDashboard() {
   const { shipments, updateShipmentRoute, mounted } = useShipments();
   const { contexts } = useShipmentContext(shipments);
   const [focusedShipment, setFocusedShipment] = useState<Shipment | null>(null);
-  
+
   // AI State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
@@ -63,62 +63,62 @@ export default function OpsDashboard() {
 
       let analysisResult = null;
       if (process.env.NEXT_PUBLIC_GEMINI_API_KEY || true) { // ALWAYS TRY API ROUTE
-          const res = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-          });
-          
-          if (!res.ok) {
-            throw new Error(`API Error: ${await res.text()}`);
-          }
-          
-          analysisResult = await res.json();
-          if (analysisResult.error) throw new Error(analysisResult.error);
+        const res = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+
+        if (!res.ok) {
+          throw new Error(`API Error: ${await res.text()}`);
+        }
+
+        analysisResult = await res.json();
+        if (analysisResult.error) throw new Error(analysisResult.error);
       } else {
-          // Simulate network delay
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          // Provide realistic dummy fallback based on shipment
-          if (shipment.id === "SHP101") {
-              analysisResult = {
-                  risk: "High",
-                  reason: "Severe traffic congestion detected on NH19 causing 2+ hours delay.",
-                  suggestion: "Reroute via Agra-Lucknow Expressway to bypass congestion.",
-                  optimizedRoute: [
-                      { lat: 28.6139, lng: 77.2090, name: "Delhi Hub", type: "Origin" },
-                      { lat: 26.8467, lng: 80.9462, name: "Lucknow Transit (Bypass)", type: "Transit" },
-                      { lat: 25.5941, lng: 85.1376, name: "Patna Delivery", type: "Destination" }
-                  ]
-              };
-          } else if (shipment.id === "SHP104") {
-              analysisResult = {
-                  risk: "High",
-                  reason: "Landslide near Siliguri completely blocking main route.",
-                  suggestion: "Divert shipment to alternate highway via Malda.",
-                  optimizedRoute: [
-                      { lat: 22.5726, lng: 88.3639, name: "Kolkata Hub", type: "Origin" },
-                      { lat: 25.0002, lng: 88.1433, name: "Malda Alternate", type: "Transit" },
-                      { lat: 26.1445, lng: 91.7362, name: "Guwahati Hub", type: "Destination" }
-                  ]
-              };
-          } else {
-             analysisResult = {
-                  risk: "Low",
-                  reason: "Current route is optimal. Minor weather disruptions expected to clear.",
-                  suggestion: "Maintain current route.",
-                  optimizedRoute: shipment.route
-              };
-          }
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Provide realistic dummy fallback based on shipment
+        if (shipment.id === "SHP101") {
+          analysisResult = {
+            risk: "High",
+            reason: "Severe traffic congestion detected on NH19 causing 2+ hours delay.",
+            suggestion: "Reroute via Agra-Lucknow Expressway to bypass congestion.",
+            optimizedRoute: [
+              { lat: 28.6139, lng: 77.2090, name: "Delhi Hub", type: "Origin" },
+              { lat: 26.8467, lng: 80.9462, name: "Lucknow Transit (Bypass)", type: "Transit" },
+              { lat: 25.5941, lng: 85.1376, name: "Patna Delivery", type: "Destination" }
+            ]
+          };
+        } else if (shipment.id === "SHP104") {
+          analysisResult = {
+            risk: "High",
+            reason: "Landslide near Siliguri completely blocking main route.",
+            suggestion: "Divert shipment to alternate highway via Malda.",
+            optimizedRoute: [
+              { lat: 22.5726, lng: 88.3639, name: "Kolkata Hub", type: "Origin" },
+              { lat: 25.0002, lng: 88.1433, name: "Malda Alternate", type: "Transit" },
+              { lat: 26.1445, lng: 91.7362, name: "Guwahati Hub", type: "Destination" }
+            ]
+          };
+        } else {
+          analysisResult = {
+            risk: "Low",
+            reason: "Current route is optimal. Minor weather disruptions expected to clear.",
+            suggestion: "Maintain current route.",
+            optimizedRoute: shipment.route
+          };
+        }
       }
-      
+
       setAiAnalysis(analysisResult);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Analysis Error", error);
       setAiAnalysis({
-          risk: "Error",
-          reason: error.message || "Failed to connect to AI service.",
-          suggestion: "Please check your API key or try again later.",
-          optimizedRoute: shipment.route
+        risk: "Error",
+        reason: error.message || "Failed to connect to AI service.",
+        suggestion: "Please check your API key or try again later.",
+        optimizedRoute: shipment.route
       });
     } finally {
       setIsAnalyzing(false);
@@ -128,11 +128,11 @@ export default function OpsDashboard() {
   const applySuggestedRoute = () => {
     if (focusedShipment && aiAnalysis && aiAnalysis.optimizedRoute) {
       updateShipmentRoute(
-          focusedShipment.id, 
-          aiAnalysis.optimizedRoute, 
-          "Low", 
-          null, 
-          "On Time (Adjusted)"
+        focusedShipment.id,
+        aiAnalysis.optimizedRoute,
+        "Low",
+        null,
+        "On Time (Adjusted)"
       );
       setFocusedShipment(null);
       setAiAnalysis(null);
@@ -161,7 +161,7 @@ export default function OpsDashboard() {
       </div>
 
       <main className="flex-1 px-4 max-w-7xl mx-auto w-full space-y-8 -mt-12 relative z-20 pb-20">
-        
+
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-lg flex items-center justify-between">
@@ -199,7 +199,7 @@ export default function OpsDashboard() {
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col p-2 h-full">
             <OpsMap shipments={shipments} focusedShipmentId={focusedShipment?.id || null} contexts={contexts} />
           </div>
-          
+
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-5 flex flex-col h-[500px] overflow-hidden">
             <h3 className="font-bold text-lg flex items-center gap-2 mb-4 text-slate-900">
               <Bell className="w-5 h-5 text-brand-orange" /> Real-Time Alerts
@@ -255,28 +255,27 @@ export default function OpsDashboard() {
                     <td className="px-6 py-4">
                       {contexts[s.id] ? (
                         <div className="flex flex-col gap-1">
-                           <div className="flex items-center gap-1 text-xs font-bold text-slate-700">
-                             {contexts[s.id].weather?.condition === 'Rain' ? <CloudRain className="w-4 h-4 text-blue-500"/> : contexts[s.id].weather?.condition === 'Clear' ? <Sun className="w-4 h-4 text-amber-500"/> : contexts[s.id].weather?.condition === 'Thunderstorm' ? <CloudLightning className="w-4 h-4 text-purple-500"/> : <Wind className="w-4 h-4 text-slate-400"/>}
-                             {contexts[s.id].weather?.temp}°C - {contexts[s.id].weather?.condition}
-                           </div>
-                           <div className="text-[10px] font-bold text-slate-500 uppercase">Traffic: {contexts[s.id].traffic}</div>
+                          <div className="flex items-center gap-1 text-xs font-bold text-slate-700">
+                            {contexts[s.id].weather?.condition === 'Rain' ? <CloudRain className="w-4 h-4 text-blue-500" /> : contexts[s.id].weather?.condition === 'Clear' ? <Sun className="w-4 h-4 text-amber-500" /> : contexts[s.id].weather?.condition === 'Thunderstorm' ? <CloudLightning className="w-4 h-4 text-purple-500" /> : <Wind className="w-4 h-4 text-slate-400" />}
+                            {contexts[s.id].weather?.temp}°C - {contexts[s.id].weather?.condition}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-500 uppercase">Traffic: {contexts[s.id].traffic}</div>
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">Loading...</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        s.risk === 'High' ? 'bg-red-100 text-red-700' : 
-                        s.risk === 'Medium' ? 'bg-amber-100 text-amber-700' : 
-                        'bg-green-100 text-green-700'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${s.risk === 'High' ? 'bg-red-100 text-red-700' :
+                        s.risk === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
                         {s.risk}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-600">{s.eta}</td>
                     <td className="px-6 py-4 text-right">
-                      <button 
+                      <button
                         onClick={() => { setFocusedShipment(s); setAiAnalysis(null); }}
                         className="bg-brand-navy hover:bg-[#082a42] text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
                       >
@@ -304,10 +303,10 @@ export default function OpsDashboard() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                
+
                 {/* Info */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                   <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Current Status</h3>
@@ -318,8 +317,8 @@ export default function OpsDashboard() {
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                           <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Weather</p>
                           <div className="flex items-center gap-2">
-                             {contexts[focusedShipment.id].weather?.condition === 'Rain' ? <CloudRain className="w-5 h-5 text-blue-500"/> : contexts[focusedShipment.id].weather?.condition === 'Clear' ? <Sun className="w-5 h-5 text-amber-500"/> : <Wind className="w-5 h-5 text-slate-400"/>}
-                             <span className="font-bold text-slate-700">{contexts[focusedShipment.id].weather?.temp}°C</span>
+                            {contexts[focusedShipment.id].weather?.condition === 'Rain' ? <CloudRain className="w-5 h-5 text-blue-500" /> : contexts[focusedShipment.id].weather?.condition === 'Clear' ? <Sun className="w-5 h-5 text-amber-500" /> : <Wind className="w-5 h-5 text-slate-400" />}
+                            <span className="font-bold text-slate-700">{contexts[focusedShipment.id].weather?.temp}°C</span>
                           </div>
                         </div>
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -330,7 +329,7 @@ export default function OpsDashboard() {
                         </div>
                       </div>
                     )}
-                    
+
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Risk Level</p>
                       <p className={`font-black text-lg ${focusedShipment.risk === 'High' ? 'text-red-600' : focusedShipment.risk === 'Medium' ? 'text-amber-600' : 'text-green-600'}`}>
@@ -355,7 +354,7 @@ export default function OpsDashboard() {
                   <div className="absolute top-0 right-0 p-4 opacity-10">
                     <BrainCircuit className="w-24 h-24" />
                   </div>
-                  
+
                   <div className="relative z-10">
                     <h3 className="font-black text-xl mb-2 flex items-center gap-2 text-brand-orange">
                       <BrainCircuit className="w-6 h-6" /> Gemini AI Analyst
@@ -364,9 +363,9 @@ export default function OpsDashboard() {
                       Analyze real-time traffic, weather, and network data to predict risks and generate optimized alternate routes.
                     </p>
                   </div>
-                  
+
                   {!aiAnalysis ? (
-                    <button 
+                    <button
                       onClick={() => analyzeWithAI(focusedShipment)}
                       disabled={isAnalyzing}
                       className="relative z-10 w-full bg-brand-orange hover:bg-[#e66000] disabled:bg-slate-600 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold transition-colors flex justify-center items-center gap-2"
@@ -374,7 +373,7 @@ export default function OpsDashboard() {
                       {isAnalyzing ? (
                         <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Analyzing Conditions...</>
                       ) : (
-                         "Analyze Risk & Optimize Route"
+                        "Analyze Risk & Optimize Route"
                       )}
                     </button>
                   ) : (
@@ -390,7 +389,7 @@ export default function OpsDashboard() {
                       <div>
                         <p className="text-[10px] font-bold text-brand-orange uppercase tracking-wider mb-1">Suggested Action</p>
                         <p className="text-sm font-medium leading-relaxed mb-4">{aiAnalysis.suggestion}</p>
-                        <button 
+                        <button
                           onClick={applySuggestedRoute}
                           className="w-full bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg font-bold text-sm transition-colors shadow-lg"
                         >
