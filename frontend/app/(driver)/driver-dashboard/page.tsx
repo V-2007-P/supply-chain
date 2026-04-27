@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   LogOut, Package, MapPin, Navigation, Clock,
-  CheckCircle2, AlertTriangle, Truck, Box, Phone, Timer
+  CheckCircle2, AlertTriangle, Truck, Box, Phone, Timer, ArrowRight
 } from "lucide-react";
 import type { ShipmentData } from "@/components/driver/DriverMap";
 
@@ -69,9 +69,17 @@ export default function DriverDashboard() {
   const [isDelivered,  setIsDelivered]  = useState(false);
   const [showHelpline, setShowHelpline] = useState(false);
   const [activeShipment, setActiveShipment] = useState<ActiveShipment>(ACTIVE_SHIPMENT);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Auth check
+    if (sessionStorage.getItem("driver_auth") !== "true") {
+      setIsRedirecting(true);
+      router.replace("/driver-login");
+      return;
+    }
     
     // Sync with Ops Dashboard data
     const syncData = () => {
@@ -116,7 +124,14 @@ export default function DriverDashboard() {
     router.push("/driver-login");
   };
 
-  if (!mounted) return null;
+  if (!mounted || isRedirecting) return (
+    <div className="min-h-screen bg-brand-navy flex items-center justify-center">
+       <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand-orange border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white font-bold tracking-widest uppercase text-xs">Authenticating...</p>
+       </div>
+    </div>
+  );
 
   const { id, mapData, stops } = activeShipment;
   const totalPackages  = stops.reduce((s, st) => s + st.packages, 0);
@@ -169,9 +184,15 @@ export default function DriverDashboard() {
                   <h2 className="text-2xl font-bold text-slate-900 mb-2">Shipment Delivered!</h2>
                   <p className="text-slate-500 text-sm max-w-sm">Great work! Your shipment has been marked as delivered. Waiting for the Operations Manager to assign a new shipment.</p>
                 </div>
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 px-6 py-3 rounded-full text-sm font-semibold">
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 px-6 py-3 rounded-full text-sm font-semibold mb-4">
                   <Timer className="w-4 h-4 animate-pulse" /> Waiting for new shipment...
                 </div>
+                <button 
+                  onClick={() => setIsDelivered(false)}
+                  className="text-brand-navy font-bold text-sm hover:underline flex items-center gap-2"
+                >
+                  <ArrowRight className="w-4 h-4 rotate-180" /> Back to Dashboard View
+                </button>
               </div>
             ) : (
               /* ── Normal Map ── */

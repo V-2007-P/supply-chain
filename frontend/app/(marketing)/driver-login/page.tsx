@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Truck, ArrowRight, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -11,7 +11,17 @@ export default function DriverLogin() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+  
+  useEffect(() => {
+    setMounted(true);
+    if (sessionStorage.getItem("driver_auth") === "true") {
+      router.replace("/driver-dashboard");
+    }
+  }, [router]);
+
+  if (!mounted) return null;
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +33,7 @@ export default function DriverLogin() {
       if (email === "driver@courier.com" && password === "123456") {
         // Dummy Auth Success
         sessionStorage.setItem("driver_auth", "true");
-        router.push("/driver-dashboard");
+        router.replace("/driver-dashboard");
       } else {
         setError("Invalid credentials. Please try again.");
         setIsLoading(false);
