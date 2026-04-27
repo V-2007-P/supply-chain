@@ -23,7 +23,7 @@ export async function POST(req: Request) {
           content: enhancedPrompt,
         },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3-8b-8192",
       temperature: 0.2,
       response_format: { type: "json_object" },
     });
@@ -35,17 +35,15 @@ export async function POST(req: Request) {
     return NextResponse.json(JSON.parse(parsedText));
   } catch (error: any) {
     console.error("Groq API Error:", error);
+    
+    const errorMessage = error.message || "Unknown AI Error";
+    const isRateLimit = errorMessage.toLowerCase().includes("rate limit") || (error.error?.error?.code === "rate_limit_exceeded");
 
-    // Fallback response for demonstration if API fails
     return NextResponse.json({
-      risk: "Medium",
-      reason: "Traffic congestion and moderate weather conditions indicate a possible delay of 45 mins. Route adjustments recommended.",
-      suggestion: "Divert through the alternate eastern highway bypass to avoid the core congestion zone.",
-      optimizedRoute: [
-        { lat: 28.6139, lng: 77.2090, name: "Delhi Origin", type: "Origin" },
-        { lat: 27.1767, lng: 78.0081, name: "Agra Bypass", type: "Transit" },
-        { lat: 26.8467, lng: 80.9462, name: "Lucknow Destination", type: "Destination" }
-      ]
-    });
+      risk: "Error",
+      reason: isRateLimit ? "Groq API Rate Limit reached. Please wait a few minutes." : `AI Error: ${errorMessage}`,
+      suggestion: "Check your Groq dashboard or try again in a moment.",
+      optimizedRoute: []
+    }, { status: isRateLimit ? 429 : 500 });
   }
 }
