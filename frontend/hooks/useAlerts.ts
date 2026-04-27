@@ -117,8 +117,8 @@ function generateAlerts(shipments: Shipment[], contexts: Record<string, Shipment
   }
 
   // Sort: High first, then Medium, then Low
-  const severityOrder = { High: 0, Medium: 1, Low: 2 };
-  alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+  const severityOrder: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+  alerts.sort((a, b) => (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5));
 
   return alerts;
 }

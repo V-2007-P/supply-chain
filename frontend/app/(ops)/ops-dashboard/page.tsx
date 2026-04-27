@@ -33,14 +33,24 @@ export default function OpsDashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
 
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
   useEffect(() => {
     // Auth check
     if (sessionStorage.getItem("ops_auth") !== "true") {
+      setIsRedirecting(true);
       router.push("/ops-login");
     }
   }, [router]);
 
-  if (!mounted) return null;
+  if (!mounted || isRedirecting) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+       <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand-orange border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white font-bold tracking-widest uppercase text-xs">Initializing Tower...</p>
+       </div>
+    </div>
+  );
 
   const calculateRouteDistance = (route: Stop[]) => {
     let dist = 0;
@@ -70,7 +80,7 @@ export default function OpsDashboard() {
 
   const totalShipments = enrichedShipments.length;
   const highRisk = enrichedShipments.filter(s => s.risk === "High").length;
-  const delayed = enrichedShipments.filter(s => s.eta.includes("Delayed")).length;
+  const delayed = enrichedShipments.filter(s => s.eta && s.eta.includes("Delayed")).length;
   const active = enrichedShipments.filter(s => s.status === "In Transit").length;
 
   const analyzeWithAI = async (shipment: Shipment) => {

@@ -58,7 +58,7 @@ export default function OpsMap({
 
   // Fit bounds when shipments change
   useEffect(() => {
-    if (map && displayShipments.length > 0 && window.google) {
+    if (map && displayShipments.length > 0 && typeof window !== 'undefined' && window.google && window.google.maps) {
       const bounds = new window.google.maps.LatLngBounds();
       let hasPoints = false;
       
@@ -80,7 +80,7 @@ export default function OpsMap({
 
   // High-Performance Truck Animation Loop
   useEffect(() => {
-    if (!window.google) return;
+    if (typeof window === 'undefined' || !window.google || !window.google.maps) return;
     
     let lastTime = performance.now();
     
@@ -142,7 +142,7 @@ export default function OpsMap({
             strokeColor: "#ffffff",
             scale: 1.2,
             rotation: heading - 90, // The SVG path faces right natively (90 degrees). Subtract 90 to align with North.
-            anchor: new window.google.maps.Point(12, 12),
+            anchor: window.google?.maps ? new window.google.maps.Point(12, 12) : undefined,
          });
       });
       
@@ -239,7 +239,7 @@ export default function OpsMap({
                         url: isDelayStop 
                           ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png'
                           : 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                        scaledSize: window.google ? new window.google.maps.Size(20, 32) : undefined,
+                        scaledSize: (typeof window !== 'undefined' && window.google?.maps) ? new window.google.maps.Size(20, 32) : undefined,
                       }}
                       onClick={() => setActiveMarker(`${shipment.id}-stop-${idx}`)}
                     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Mail, Lock, ArrowRight, Activity } from "lucide-react";
 import Link from "next/link";
@@ -10,6 +10,14 @@ export default function OpsLogin() {
   const [email, setEmail] = useState("ops@courier.com");
   const [password, setPassword] = useState("123456");
   const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();

@@ -111,10 +111,15 @@ export function useShipments() {
 
   useEffect(() => {
     let currentShipments = INITIAL_SHIPMENTS;
-    const stored = localStorage.getItem('ops_shipments');
-    if (stored) {
-      currentShipments = JSON.parse(stored);
-    } else {
+    try {
+      const stored = localStorage.getItem('ops_shipments');
+      if (stored) {
+        currentShipments = JSON.parse(stored);
+      } else {
+        localStorage.setItem('ops_shipments', JSON.stringify(INITIAL_SHIPMENTS));
+      }
+    } catch (err) {
+      console.error("Failed to parse shipments from localStorage", err);
       localStorage.setItem('ops_shipments', JSON.stringify(INITIAL_SHIPMENTS));
     }
     
@@ -139,7 +144,7 @@ export function useShipments() {
               
               if (res.ok) {
                   const data = await res.json();
-                  const detailedRoute = decodePolyline(data.polyline);
+                  const detailedRoute = data.polyline ? decodePolyline(data.polyline) : [];
                   
                   // Step 2: Traffic Detection Logic
                   let trafficLevel: "Low" | "Medium" | "High" = "Low";
@@ -209,7 +214,7 @@ export function useShipments() {
             });
             if (res.ok) {
                 const data = await res.json();
-                detailedRoute = decodePolyline(data.polyline);
+                detailedRoute = data.polyline ? decodePolyline(data.polyline) : undefined;
                 if (data.durationInTraffic > data.duration * 1.3) trafficLevel = "High";
                 else if (data.durationInTraffic > data.duration * 1.1) trafficLevel = "Medium";
 
