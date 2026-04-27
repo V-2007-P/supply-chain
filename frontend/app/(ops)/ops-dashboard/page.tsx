@@ -117,8 +117,8 @@ export default function OpsDashboard() {
       `;
 
       let analysisResult = null;
-      if (process.env.NEXT_PUBLIC_GEMINI_API_KEY || true) { // ALWAYS TRY API ROUTE
-        const res = await fetch('/api/gemini', {
+      if (process.env.GROQ_API_KEY || true) { // ALWAYS TRY API ROUTE
+        const res = await fetch('/api/groq', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt })
@@ -517,7 +517,7 @@ export default function OpsDashboard() {
 
                   <div className="relative z-10">
                     <h3 className="font-black text-xl mb-2 flex items-center gap-2 text-brand-orange">
-                      <BrainCircuit className="w-6 h-6" /> Gemini AI Analyst
+                      <BrainCircuit className="w-6 h-6" /> Groq AI Analyst
                     </h3>
                     <p className="text-brand-light/80 text-sm mb-6">
                       Analyze real-time traffic, weather, and network data to predict risks and generate optimized alternate routes.
