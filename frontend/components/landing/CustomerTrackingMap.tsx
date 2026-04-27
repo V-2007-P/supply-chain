@@ -1,45 +1,8 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-
-// Icons
-const customMarker = new L.Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
-
-const truckMarker = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [35, 55],
-  iconAnchor: [17, 55],
-  popupAnchor: [1, -40],
-});
-
-const delayMarker = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
-
-function MapController({ bounds }: { bounds?: L.LatLngBoundsExpression }) {
-  const map = useMap();
-  useEffect(() => {
-    if (bounds) {
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [bounds, map]);
-  return null;
-}
+import { useEffect, useState, useCallback } from 'react';
+import { GoogleMap, Polyline, Marker, InfoWindow } from '@react-google-maps/api';
+import GoogleMapWrapper from '../GoogleMapWrapper';
 
 export interface TrackingMapProps {
   route: { lat: number; lng: number; name: string; type: string }[];
@@ -47,74 +10,122 @@ export interface TrackingMapProps {
   delaySegment?: { startIdx: number; endIdx: number; reason: string; type: 'traffic' | 'weather' };
 }
 
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+};
+
 export default function CustomerTrackingMap({ route, currentLocation, delaySegment }: TrackingMapProps) {
-  const [mapBounds, setMapBounds] = useState<L.LatLngBoundsExpression | undefined>(undefined);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [activeMarker, setActiveMarker] = useState<string | null>(null);
+
+  const onLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+  }, []);
+
+  const onUnmount = useCallback(() => {
+    setMap(null);
+  }, []);
 
   useEffect(() => {
-    if (route.length > 0) {
-      const coords = route.map(r => [r.lat, r.lng] as [number, number]);
-      coords.push([currentLocation.lat, currentLocation.lng]);
-      const bounds = L.latLngBounds(coords);
-      setMapBounds(bounds);
+    if (map && window.google) {
+      if (route.length > 0) {
+        const bounds = new window.google.maps.LatLngBounds();
+        route.forEach(r => bounds.extend(new window.google.maps.LatLng(r.lat, r.lng)));
+        bounds.extend(new window.google.maps.LatLng(currentLocation.lat, currentLocation.lng));
+        map.fitBounds(bounds, 50);
+      }
     }
-  }, [route, currentLocation]);
+  }, [route, currentLocation, map]);
 
   return (
     <div className="h-full w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm relative z-0">
-      <MapContainer 
-        center={[currentLocation.lat, currentLocation.lng]} 
-        zoom={5} 
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={true}
-      >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; CARTO'
-        />
-        
-        {mapBounds && <MapController bounds={mapBounds} />}
-
-        {/* Base route */}
-        <Polyline 
-          positions={route.map(r => [r.lat, r.lng])} 
-          color="#0B3C5D" 
-          weight={4} 
-          dashArray="5, 10" 
-        />
-
-        {/* Delayed segment */}
-        {delaySegment && (
+      <GoogleMapWrapper>
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={currentLocation}
+          zoom={5}
+          onLoad={onLoad}
+          onUnmount={onUnmount}
+          options={{
+            styles: [
+              { featureType: "poi", stylers: [{ visibility: "off" }] },
+            ],
+            mapTypeControl: false,
+            streetViewControl: false,
+          }}
+        >
+          {/* Base route */}
           <Polyline 
-            positions={route.slice(delaySegment.startIdx, delaySegment.endIdx + 1).map(r => [r.lat, r.lng])} 
-            color="#EF4444" 
-            weight={6} 
-            className="animate-pulse"
+            path={route.map(r => ({ lat: r.lat, lng: r.lng }))}
+            options={{
+              strokeColor: "#0B3C5D",
+              strokeOpacity: 0.8,
+              strokeWeight: 4,
+            }}
           />
-        )}
 
-        {/* Stops */}
-        {route.map((stop, idx) => {
-          const isDelayStop = delaySegment && idx >= delaySegment.startIdx && idx <= delaySegment.endIdx;
-          return (
-            <Marker key={idx} position={[stop.lat, stop.lng]} icon={isDelayStop ? delayMarker : customMarker}>
-              <Popup>
-                <div className="font-bold">{stop.name}</div>
-                <div className="text-xs text-slate-500">{stop.type}</div>
-                {isDelayStop && <div className="text-red-500 text-xs font-bold mt-1">⚠️ {delaySegment.reason}</div>}
-              </Popup>
-            </Marker>
-          );
-        })}
+          {/* Delayed segment */}
+          {delaySegment && (
+            <Polyline 
+              path={route.slice(delaySegment.startIdx, delaySegment.endIdx + 1).map(r => ({ lat: r.lat, lng: r.lng }))}
+              options={{
+                strokeColor: "#EF4444",
+                strokeOpacity: 1.0,
+                strokeWeight: 6,
+              }}
+            />
+          )}
 
-        {/* Current Location (Truck) */}
-        <Marker position={[currentLocation.lat, currentLocation.lng]} icon={truckMarker}>
-          <Popup>
-            <div className="font-bold text-brand-orange">Current Location</div>
-            <div className="text-xs">Live Update</div>
-          </Popup>
-        </Marker>
+          {/* Stops */}
+          {route.map((stop, idx) => {
+            const isDelayStop = delaySegment && idx >= delaySegment.startIdx && idx <= delaySegment.endIdx;
+            return (
+              <Marker 
+                key={idx} 
+                position={{ lat: stop.lat, lng: stop.lng }}
+                icon={{
+                  url: isDelayStop 
+                    ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png'
+                    : 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                  scaledSize: window.google ? new window.google.maps.Size(25, 41) : undefined,
+                }}
+                onClick={() => setActiveMarker(`stop-${idx}`)}
+              >
+                {activeMarker === `stop-${idx}` && (
+                  <InfoWindow onCloseClick={() => setActiveMarker(null)}>
+                    <div className="text-black p-1">
+                      <div className="font-bold">{stop.name}</div>
+                      <div className="text-xs text-slate-500">{stop.type}</div>
+                      {isDelayStop && <div className="text-red-500 text-xs font-bold mt-1">⚠️ {delaySegment.reason}</div>}
+                    </div>
+                  </InfoWindow>
+                )}
+              </Marker>
+            );
+          })}
 
-      </MapContainer>
+          {/* Current Location (Truck) */}
+          <Marker 
+            position={currentLocation}
+            icon={{
+              url: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+              scaledSize: window.google ? new window.google.maps.Size(35, 55) : undefined,
+            }}
+            onClick={() => setActiveMarker("truck")}
+            zIndex={100}
+          >
+            {activeMarker === "truck" && (
+              <InfoWindow onCloseClick={() => setActiveMarker(null)}>
+                <div className="text-black p-1">
+                  <div className="font-bold text-brand-orange">Current Location</div>
+                  <div className="text-xs">Live Update</div>
+                </div>
+              </InfoWindow>
+            )}
+          </Marker>
+        </GoogleMap>
+      </GoogleMapWrapper>
     </div>
   );
 }

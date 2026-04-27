@@ -38,10 +38,6 @@ export function Navbar() {
             </button>
             
             <div className="absolute top-full right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-              <Link href="/dashboard" className="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 hover:text-brand-orange transition">
-                <div className="font-semibold">User Dashboard</div>
-                <div className="text-xs text-slate-500">Manage your personal shipments</div>
-              </Link>
               <Link href="/ops-login" className="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 hover:text-brand-orange transition">
                 <div className="font-semibold">Operations Manager</div>
                 <div className="text-xs text-slate-500">Access full operations suite</div>

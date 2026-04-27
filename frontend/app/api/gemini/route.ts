@@ -1,29 +1,11 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import fs from 'fs';
-import path from 'path';
 
 export async function POST(req: Request) {
   try {
     const { prompt } = await req.json();
 
-    // Dynamically read .env.local to avoid requiring a server restart
-    let dynamicApiKey = "";
-    try {
-      const envPath = path.join(process.cwd(), '.env.local');
-      if (fs.existsSync(envPath)) {
-        const envContent = fs.readFileSync(envPath, 'utf8');
-        const match = envContent.match(/GROQ_API_KEY="?([^"\n]+)"?/);
-        if (match && match[1]) {
-          dynamicApiKey = match[1];
-        }
-      }
-    } catch (e) {
-      console.log("Failed to read .env.local dynamically");
-    }
-
-    const apiKey = dynamicApiKey || process.env.GROQ_API_KEY;
-    console.log("Using API Key starting with:", apiKey ? apiKey.substring(0, 15) : "none");
+    const apiKey = process.env.GROQ_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json({ error: "Missing Groq API Key" }, { status: 500 });
@@ -31,8 +13,7 @@ export async function POST(req: Request) {
 
     const groq = new Groq({ apiKey });
 
-    // Assuming the prompt already asks for JSON output, otherwise we enforce it in code
-    // Let's add "Return ONLY valid JSON." to the prompt just in case.
+    // The user wants a strict JSON response
     const enhancedPrompt = prompt + "\n\nReturn ONLY a valid JSON object. Do not include markdown formatting like ```json or ```.";
 
     const chatCompletion = await groq.chat.completions.create({
@@ -56,7 +37,6 @@ export async function POST(req: Request) {
     console.error("Groq API Error:", error);
 
     // Fallback response for demonstration if API fails
-    console.log("Error occurred. Returning simulated AI response fallback.");
     return NextResponse.json({
       risk: "Medium",
       reason: "Traffic congestion and moderate weather conditions indicate a possible delay of 45 mins. Route adjustments recommended.",

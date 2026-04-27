@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { decodePolyline } from '@/lib/polyline';
 
 export interface Stop {
   lat: number;
@@ -19,6 +20,11 @@ export interface Shipment {
   suggestedRoute?: Stop[] | null;
   currentLocation?: { lat: number; lng: number };
   delaySegment?: { startIdx: number; endIdx: number; reason: string; type: string };
+  detailedRoute?: { lat: number; lng: number }[];
+  duration?: number;
+  durationInTraffic?: number;
+  trafficLevel?: "Low" | "Medium" | "High";
+  trafficDelayText?: string;
 }
 
 const INITIAL_SHIPMENTS: Shipment[] = [
@@ -104,35 +110,141 @@ export function useShipments() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    let currentShipments = INITIAL_SHIPMENTS;
     const stored = localStorage.getItem('ops_shipments');
     if (stored) {
-      setShipments(JSON.parse(stored));
+      currentShipments = JSON.parse(stored);
     } else {
-      setShipments(INITIAL_SHIPMENTS);
       localStorage.setItem('ops_shipments', JSON.stringify(INITIAL_SHIPMENTS));
     }
+    
+    setShipments(currentShipments);
     setMounted(true);
+
+    const enrichShipments = async () => {
+      let updated = false;
+      const enriched = await Promise.all(currentShipments.map(async (shipment) => {
+        if (!shipment.detailedRoute && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+           try {
+              const waypoints = shipment.route.slice(1, -1);
+              const res = await fetch('/api/directions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      origin: shipment.route[0],
+                      destination: shipment.route[shipment.route.length - 1],
+                      waypoints: waypoints.length > 0 ? waypoints : undefined
+                  })
+              });
+              
+              if (res.ok) {
+                  const data = await res.json();
+                  const detailedRoute = decodePolyline(data.polyline);
+                  
+                  // Step 2: Traffic Detection Logic
+                  let trafficLevel: "Low" | "Medium" | "High" = "Low";
+                  let trafficDelayText = "";
+
+                  if (data.durationInTraffic > data.duration * 1.3) trafficLevel = "High";
+                  else if (data.durationInTraffic > data.duration * 1.1) trafficLevel = "Medium";
+
+                  if (data.durationInTraffic > data.duration) {
+                      const delayMins = Math.round((data.durationInTraffic - data.duration) / 60);
+                      if (delayMins > 0) {
+                          trafficDelayText = `+${delayMins} min`;
+                      }
+                  }
+
+                  updated = true;
+                  return { 
+                      ...shipment, 
+                      detailedRoute, 
+                      duration: data.duration, 
+                      durationInTraffic: data.durationInTraffic,
+                      trafficLevel,
+                      trafficDelayText
+                  };
+              }
+           } catch (err) {
+               console.error("Failed to enrich route for", shipment.id, err);
+           }
+        }
+        return shipment;
+      }));
+
+      if (updated) {
+          setShipments(enriched);
+          localStorage.setItem('ops_shipments', JSON.stringify(enriched));
+      }
+    };
+
+    enrichShipments();
+
+    // Re-fetch traffic data from Directions API every 1 minute
+    const trafficInterval = setInterval(() => {
+      console.log('[SwiftRoute] Refreshing traffic data from Directions API...');
+      enrichShipments();
+    }, 60000);
+
+    return () => clearInterval(trafficInterval);
   }, []);
 
-  const updateShipmentRoute = (id: string, newRoute: Stop[], newRisk: "Low" | "Medium" | "High", newDelayReason: string | null, newEta: string) => {
+  const updateShipmentRoute = async (id: string, newRoute: Stop[], newRisk: "Low" | "Medium" | "High", newDelayReason: string | null, newEta: string) => {
+    // We should fetch new polyline for this updated route!
+    let detailedRoute = undefined;
+    let trafficLevel: "Low" | "Medium" | "High" = "Low";
+    let trafficDelayText = "";
+
+    if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+        try {
+            const waypoints = newRoute.slice(1, -1);
+            const res = await fetch('/api/directions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    origin: newRoute[0],
+                    destination: newRoute[newRoute.length - 1],
+                    waypoints: waypoints.length > 0 ? waypoints : undefined
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                detailedRoute = decodePolyline(data.polyline);
+                if (data.durationInTraffic > data.duration * 1.3) trafficLevel = "High";
+                else if (data.durationInTraffic > data.duration * 1.1) trafficLevel = "Medium";
+
+                if (data.durationInTraffic > data.duration) {
+                    const delayMins = Math.round((data.durationInTraffic - data.duration) / 60);
+                    if (delayMins > 0) {
+                        trafficDelayText = `+${delayMins} min`;
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("Failed to fetch new route details", err);
+        }
+    }
+
     const updated = shipments.map(s => {
       if (s.id === id) {
         return {
           ...s,
           route: newRoute,
+          detailedRoute: detailedRoute || s.detailedRoute,
+          trafficLevel: trafficLevel || s.trafficLevel,
+          trafficDelayText: trafficDelayText || s.trafficDelayText,
           suggestedRoute: null,
           risk: newRisk,
           delayReason: newDelayReason,
           eta: newEta,
-          delaySegment: undefined // Remove delay highlight after optimization
+          delaySegment: undefined
         };
       }
       return s;
     });
+    
     setShipments(updated);
     localStorage.setItem('ops_shipments', JSON.stringify(updated));
-    
-    // Also dispatch event so other tabs/components update
     window.dispatchEvent(new Event('shipments_updated'));
   };
 

@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Bell, Activity, Truck, AlertTriangle, CheckCircle2, Clock, BrainCircuit, X, MapPin, CloudRain, Sun, Wind, CloudLightning } from "lucide-react";
+import { Bell, Activity, Truck, AlertTriangle, CheckCircle2, Clock, BrainCircuit, X, MapPin, CloudRain, Sun, Wind, CloudLightning, TrafficCone, Zap, RefreshCw } from "lucide-react";
 import { useShipments, Shipment, Stop } from "@/hooks/useShipments";
 import { useShipmentContext } from "@/hooks/useWeather";
 import { useLogisticsData } from "@/hooks/useLogisticsData";
+import { useAlerts, Alert } from "@/hooks/useAlerts";
 
 // Dynamically load Map to prevent SSR issues
 const OpsMap = dynamic(() => import('@/components/ops/OpsMap'), {
@@ -19,6 +20,13 @@ export default function OpsDashboard() {
   const { shipments, updateShipmentRoute, mounted } = useShipments();
   const { contexts } = useShipmentContext(shipments);
   const { insights, loading: dataLoading, getRiskLevel, getInsightMessage } = useLogisticsData();
+
+  // Build historical insight string for AI context
+  const historicalInsight = insights 
+    ? `Rainy weather causes ${(insights.delayByWeather['rainy'] || 0).toFixed(0)}% delays. Long distance (>200km) has ${(insights.delayByDistance['Long (> 200km)'] || 0).toFixed(0)}% delay rate. Trucks delay ${(insights.delayByVehicle['truck'] || 0).toFixed(0)}% of the time.`
+    : '';
+
+  const { alerts, refreshAlerts, loadingPredictions, fetchPredictions } = useAlerts(shipments, contexts, historicalInsight);
   const [focusedShipment, setFocusedShipment] = useState<Shipment | null>(null);
 
   // AI State
@@ -74,21 +82,36 @@ export default function OpsDashboard() {
       const datasetInsight = getInsightMessage(context?.weather?.condition || 'Clear', dist, 'truck');
 
       const prompt = `
-        Analyze this logistics route using weather and traffic conditions.
-        Route: ${shipment.route.map(r => r.name).join(" -> ")}
-        Weather: ${context?.weather?.condition || 'Unknown'} (${context?.weather?.temp || 0}°C)
-        Traffic: ${context?.traffic || 'Unknown'}
-        Delay Reason: ${shipment.delayReason || 'None'}
-        Historical Insight: ${datasetInsight}
-        
-        Predict risk level (Low/Medium/High), explain the reason, and suggest an optimized alternate route.
+        You are an expert logistics route optimization AI. Your job is to analyze REAL-TIME conditions and suggest an ALTERNATE route that avoids traffic congestion and adverse weather.
+
+        CURRENT SHIPMENT:
+        - Route: ${shipment.route.map(r => r.name).join(" → ")}
+        - Origin: ${shipment.source} | Destination: ${shipment.destination}
+        - Current Weather: ${context?.weather?.condition || 'Unknown'} (${context?.weather?.temp || 'N/A'}°C)
+        - Weather Risk: ${context?.weather?.weatherRisk || 'Unknown'}
+        - Weather Forecast: ${context?.weather?.forecast || 'N/A'}
+        - Current Traffic: ${context?.traffic || 'Unknown'}
+        - Traffic Delay: ${shipment.trafficDelayText || 'None detected'}
+        - Existing Delay Reason: ${shipment.delayReason || 'None'}
+
+        HISTORICAL DATA PATTERNS:
+        ${historicalInsight || 'No historical data available'}
+        ${datasetInsight}
+
+        INSTRUCTIONS:
+        1. If weather is adverse (Rain/Storm/Fog/Snow) OR traffic is Medium/High, you MUST suggest an alternate route through cities/highways with BETTER weather and LESS traffic.
+        2. The optimizedRoute MUST contain real Indian city coordinates (lat/lng) that form a geographically valid path from ${shipment.source} to ${shipment.destination}.
+        3. Prefer national highways and expressways that bypass congested urban areas.
+        4. Use historical data patterns to justify your risk assessment.
+        5. If conditions are already optimal (clear weather, low traffic), respond with the current route and explain why no change is needed.
+
         Return ONLY valid JSON in this exact format:
         {
-          "risk": "High",
-          "reason": "Detailed explanation...",
-          "suggestion": "Detailed suggestion...",
+          "risk": "High" or "Medium" or "Low",
+          "reason": "Detailed explanation combining weather + traffic + historical data",
+          "suggestion": "Specific route change recommendation with city names",
           "optimizedRoute": [
-            { "lat": number, "lng": number, "name": "string", "type": "string" }
+            { "lat": number, "lng": number, "name": "City/Hub Name", "type": "Origin" or "Transit" or "Destination" }
           ]
         }
       `;
@@ -262,25 +285,87 @@ export default function OpsDashboard() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-5 flex flex-col h-[500px] overflow-hidden">
-            <h3 className="font-bold text-lg flex items-center gap-2 mb-4 text-slate-900">
-              <Bell className="w-5 h-5 text-brand-orange" /> Real-Time Alerts
-            </h3>
-            <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-              {enrichedShipments.filter(s => s.delayReason).map((s, i) => (
-                <div key={i} className={`p-4 rounded-xl border ${s.risk === 'High' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'} animate-in fade-in slide-in-from-right-4`}>
-                  <div className="flex gap-3">
-                    <AlertTriangle className={`w-5 h-5 shrink-0 ${s.risk === 'High' ? 'text-red-500' : 'text-amber-500'}`} />
-                    <div>
-                      <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${s.risk === 'High' ? 'text-red-800' : 'text-amber-800'}`}>{s.id} - {s.risk} RISK</p>
-                      <p className="text-sm font-semibold text-slate-800">{s.delayReason}</p>
-                    </div>
-                  </div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900">
+                <Bell className="w-5 h-5 text-brand-orange" /> Real-Time Alerts
+              </h3>
+              <div className="flex items-center gap-2">
+                {alerts.length > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">{alerts.length}</span>
+                )}
+                <button onClick={refreshAlerts} className="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-400 hover:text-slate-600" title="Refresh alerts">
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+              {loadingPredictions && alerts.length === 0 && (
+                <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                  <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs font-bold text-purple-700">Loading AI predictions...</span>
                 </div>
-              ))}
-              {highRisk === 0 && delayed === 0 && (
+              )}
+              {alerts.map((alert) => {
+                const isPrediction = alert.type === 'prediction';
+                const bgClass = isPrediction ? 'bg-purple-50 border-purple-200' : alert.severity === 'High' ? 'bg-red-50 border-red-200' : alert.severity === 'Medium' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200';
+                const iconBgClass = isPrediction ? 'bg-purple-100' : alert.severity === 'High' ? 'bg-red-100' : alert.severity === 'Medium' ? 'bg-amber-100' : 'bg-green-100';
+                const AlertIcon = isPrediction ? BrainCircuit : alert.type === 'weather' ? CloudRain : alert.type === 'traffic' ? TrafficCone : Zap;
+                const iconColorClass = isPrediction ? 'text-purple-600' : alert.type === 'weather' ? 'text-blue-500' : alert.type === 'traffic' ? 'text-orange-500' : 'text-red-500';
+                const titleColorClass = isPrediction ? 'text-purple-700' : alert.severity === 'High' ? 'text-red-700' : alert.severity === 'Medium' ? 'text-amber-700' : 'text-green-700';
+                const badgeClass = isPrediction ? 'bg-purple-200 text-purple-800' : alert.severity === 'High' ? 'bg-red-200 text-red-800' : alert.severity === 'Medium' ? 'bg-amber-200 text-amber-800' : 'bg-green-200 text-green-800';
+                const delayClass = isPrediction ? 'text-purple-600 bg-purple-100' : alert.severity === 'High' ? 'text-red-600 bg-red-100' : alert.severity === 'Medium' ? 'text-amber-600 bg-amber-100' : 'text-green-600 bg-green-100';
+
+                return (
+                  <button
+                    key={alert.id}
+                    onClick={() => {
+                      const shipment = enrichedShipments.find(s => s.id === alert.shipmentId);
+                      if (shipment) {
+                        setFocusedShipment(shipment);
+                        setAiAnalysis(null);
+                      }
+                    }}
+                    className={`w-full text-left p-3.5 rounded-xl border ${bgClass} hover:shadow-md transition-all duration-200 group cursor-pointer`}
+                  >
+                    <div className="flex gap-3">
+                      <div className={`w-9 h-9 rounded-xl ${iconBgClass} flex items-center justify-center shrink-0`}>
+                        <AlertIcon className={`w-4 h-4 ${iconColorClass}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p className={`text-xs font-black uppercase tracking-wider ${titleColorClass} truncate`}>
+                            {alert.title}
+                          </p>
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${badgeClass}`}>
+                            {isPrediction ? 'AI' : alert.severity}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-slate-700 leading-relaxed mb-1.5">{alert.message}</p>
+                        {isPrediction && alert.prediction && (
+                          <p className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded-lg mb-1.5">💡 {alert.prediction}</p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                            <Truck className="w-3 h-3" /> {alert.shipmentId}
+                          </span>
+                          {alert.delay !== 'Monitoring' && alert.delay !== 'On Time' ? (
+                            <span className={`text-[10px] font-black ${delayClass} px-1.5 py-0.5 rounded-md flex items-center gap-1`}>
+                              <Clock className="w-3 h-3" /> {alert.delay}
+                            </span>
+                          ) : (
+                            <span className={`text-[10px] font-bold ${alert.delay === 'On Time' ? 'text-green-500' : 'text-slate-400'} italic`}>{alert.delay}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {alerts.length === 0 && !loadingPredictions && (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                  <CheckCircle2 className="w-12 h-12 mb-2 text-slate-200" />
-                  <p>All clear. No active alerts.</p>
+                  <CheckCircle2 className="w-12 h-12 mb-2 text-green-200" />
+                  <p className="font-bold text-sm">All Clear</p>
+                  <p className="text-xs text-slate-300 mt-1">No active alerts detected.</p>
                 </div>
               )}
             </div>

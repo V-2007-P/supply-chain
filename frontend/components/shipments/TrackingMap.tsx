@@ -1,49 +1,26 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { GoogleMap, Polyline, Marker, InfoWindow, TrafficLayer } from "@react-google-maps/api";
 import { Shipment } from "@/types";
-
-// Custom icons
-const truckIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/2766/2766068.png", // Truck icon
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-  popupAnchor: [0, -16],
-});
-
-const stopIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
-  iconSize: [20, 32],
-  iconAnchor: [10, 32],
-  popupAnchor: [1, -28],
-  shadowSize: [32, 32],
-});
-
-const delayIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
-  iconSize: [20, 32],
-  iconAnchor: [10, 32],
-  popupAnchor: [1, -28],
-  shadowSize: [32, 32],
-});
+import GoogleMapWrapper from "../GoogleMapWrapper";
 
 interface TrackingMapProps {
   shipment: Shipment;
 }
 
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+};
+
 export default function TrackingMap({ shipment }: TrackingMapProps) {
-  // Hardcoded route: Delhi -> Agra -> Kanpur -> Varanasi -> Patna
-  const routePoints: [number, number][] = [
-    [28.7041, 77.1025], // Delhi
-    [27.1767, 78.0081], // Agra
-    [26.4499, 80.3319], // Kanpur
-    [25.3176, 82.9739], // Varanasi
-    [25.5941, 85.1376], // Patna
+  const routePoints = [
+    { lat: 28.7041, lng: 77.1025 }, // Delhi
+    { lat: 27.1767, lng: 78.0081 }, // Agra
+    { lat: 26.4499, lng: 80.3319 }, // Kanpur
+    { lat: 25.3176, lng: 82.9739 }, // Varanasi
+    { lat: 25.5941, lng: 85.1376 }, // Patna
   ];
 
   const stops = [
@@ -54,25 +31,24 @@ export default function TrackingMap({ shipment }: TrackingMapProps) {
     { name: "Patna Destination", pos: routePoints[4] },
   ];
 
-  // Interpolated detailed route for smooth animation
-  const [detailedRoute, setDetailedRoute] = useState<[number, number][]>([]);
-  const [truckPos, setTruckPos] = useState<[number, number]>(routePoints[0]);
+  const [detailedRoute, setDetailedRoute] = useState<{lat: number, lng: number}[]>([]);
+  const [truckPos, setTruckPos] = useState(routePoints[0]);
   const animationRef = useRef<number>();
   const progressRef = useRef(0);
+  const [activeMarker, setActiveMarker] = useState<string | null>(null);
 
   useEffect(() => {
-    // Generate interpolated points between major stops
     const generatePath = () => {
-      const path: [number, number][] = [];
-      const steps = 100; // frames per segment
+      const path: {lat: number, lng: number}[] = [];
+      const steps = 100;
       for (let i = 0; i < routePoints.length - 1; i++) {
         const p1 = routePoints[i];
         const p2 = routePoints[i + 1];
         for (let j = 0; j < steps; j++) {
           const t = j / steps;
-          const lat = p1[0] + (p2[0] - p1[0]) * t;
-          const lng = p1[1] + (p2[1] - p1[1]) * t;
-          path.push([lat, lng]);
+          const lat = p1.lat + (p2.lat - p1.lat) * t;
+          const lng = p1.lng + (p2.lng - p1.lng) * t;
+          path.push({lat, lng});
         }
       }
       path.push(routePoints[routePoints.length - 1]);
@@ -82,11 +58,10 @@ export default function TrackingMap({ shipment }: TrackingMapProps) {
     const path = generatePath();
     setDetailedRoute(path);
 
-    // Animation Loop
     const animateTruck = () => {
-      progressRef.current += 0.3; // speed
+      progressRef.current += 0.3;
       if (progressRef.current >= path.length) {
-        progressRef.current = 0; // loop
+        progressRef.current = 0;
       }
       
       const index = Math.floor(progressRef.current);
@@ -104,57 +79,99 @@ export default function TrackingMap({ shipment }: TrackingMapProps) {
     };
   }, []);
 
-  const center: [number, number] = [26.5, 81.0]; // Centered between Delhi and Patna
+  const center = { lat: 26.5, lng: 81.0 }; // Centered between Delhi and Patna
 
   return (
     <div className="h-full w-full relative z-0">
-      <MapContainer 
-        center={center} 
-        zoom={6} 
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom={true}
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          className="map-tiles grayscale opacity-80" // Muted map style
-        />
+      <GoogleMapWrapper>
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={center}
+          zoom={6}
+          options={{
+            styles: [
+              { featureType: "all", stylers: [{ saturation: -80 }] }, // Grayscale-like
+            ],
+            mapTypeControl: false,
+            streetViewControl: false,
+            zoomControl: false,
+          }}
+        >
+          {/* Regular Route Line */}
+          <Polyline 
+            path={routePoints} 
+            options={{ strokeColor: "#3b82f6", strokeWeight: 4, strokeOpacity: 0.6 }} 
+          />
+          
+          {/* Disrupted Segment (Kanpur to Varanasi) */}
+          <Polyline 
+            path={[routePoints[2], routePoints[3]]} 
+            options={{ strokeColor: "#ef4444", strokeWeight: 5, strokeOpacity: 0.8 }} 
+          />
 
-        {/* Regular Route Line */}
-        <Polyline positions={routePoints} color="#3b82f6" weight={4} opacity={0.6} dashArray="8, 8" />
-        
-        {/* Disrupted Segment (Kanpur to Varanasi) */}
-        <Polyline positions={[routePoints[2], routePoints[3]]} color="#ef4444" weight={5} opacity={0.8} />
+          {/* Stops */}
+          {stops.map((stop, i) => (
+            <Marker 
+              key={i} 
+              position={stop.pos} 
+              icon={{
+                url: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+                scaledSize: window.google ? new window.google.maps.Size(20, 32) : undefined,
+              }}
+              onClick={() => setActiveMarker(`stop-${i}`)}
+            >
+              {activeMarker === `stop-${i}` && (
+                <InfoWindow onCloseClick={() => setActiveMarker(null)}>
+                  <span className="font-semibold text-black p-1">{stop.name}</span>
+                </InfoWindow>
+              )}
+            </Marker>
+          ))}
 
-        {/* Stops */}
-        {stops.map((stop, i) => (
-          <Marker key={i} position={stop.pos as [number, number]} icon={stopIcon}>
-            <Tooltip direction="top" offset={[0, -20]} opacity={1} permanent={false}>
-              <span className="font-semibold">{stop.name}</span>
-            </Tooltip>
+          {/* Delay Marker */}
+          <Marker 
+            position={{
+              lat: (routePoints[2].lat + routePoints[3].lat) / 2, 
+              lng: (routePoints[2].lng + routePoints[3].lng) / 2
+            }}
+            icon={{
+              url: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+              scaledSize: window.google ? new window.google.maps.Size(20, 32) : undefined,
+            }}
+            onClick={() => setActiveMarker("delay")}
+          >
+            {activeMarker === "delay" && (
+              <InfoWindow onCloseClick={() => setActiveMarker(null)}>
+                <div className="text-red-600 font-bold flex items-center gap-1 p-1">
+                  ⚠️ Heavy Traffic Delay
+                </div>
+              </InfoWindow>
+            )}
           </Marker>
-        ))}
 
-        {/* Delay Marker */}
-        <Marker position={[(routePoints[2][0] + routePoints[3][0])/2, (routePoints[2][1] + routePoints[3][1])/2]} icon={delayIcon}>
-          <Tooltip direction="right" offset={[10, -10]} opacity={1} permanent>
-            <div className="text-destructive font-bold flex items-center gap-1">
-              ⚠️ Heavy Traffic Delay
-            </div>
-          </Tooltip>
-        </Marker>
+          {/* Moving Truck */}
+          {detailedRoute.length > 0 && (
+            <Marker 
+              position={truckPos} 
+              icon={{
+                url: "https://cdn-icons-png.flaticon.com/512/2766/2766068.png",
+                scaledSize: window.google ? new window.google.maps.Size(32, 32) : undefined,
+                anchor: window.google ? new window.google.maps.Point(16, 16) : undefined,
+              }}
+              onClick={() => setActiveMarker("truck")}
+              zIndex={1000}
+            >
+              {activeMarker === "truck" && (
+                <InfoWindow onCloseClick={() => setActiveMarker(null)}>
+                  <span className="font-bold text-black p-1">{shipment.awb}</span>
+                </InfoWindow>
+              )}
+            </Marker>
+          )}
 
-        {/* Moving Truck */}
-        {detailedRoute.length > 0 && (
-          <Marker position={truckPos} icon={truckIcon} zIndexOffset={1000}>
-            <Tooltip direction="top" offset={[0, -10]} opacity={1}>
-              <span className="font-bold">{shipment.awb}</span>
-            </Tooltip>
-          </Marker>
-        )}
-
-      </MapContainer>
+          <TrafficLayer />
+        </GoogleMap>
+      </GoogleMapWrapper>
     </div>
   );
 }
