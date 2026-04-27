@@ -2,6 +2,7 @@ services:
   # AI Service (FastAPI)
   - type: web
     name: supply-chain-ai
+    plan: free
     runtime: python
     rootDir: ai-service
     buildCommand: pip install -r requirements.txt
@@ -13,6 +14,7 @@ services:
   # Backend (Node.js/Express)
   - type: web
     name: supply-chain-backend
+    plan: free
     runtime: node
     rootDir: backend
     buildCommand: npm install && npm run build
@@ -40,6 +42,7 @@ services:
   # Frontend (Next.js)
   - type: web
     name: supply-chain-frontend
+    plan: free
     runtime: node
     rootDir: frontend
     buildCommand: npm install && npm run build
