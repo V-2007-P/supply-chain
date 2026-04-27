@@ -1,0 +1,67 @@
+services:
+  # AI Service (FastAPI)
+  - type: web
+    name: supply-chain-ai
+    runtime: python
+    rootDir: ai-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: PORT
+        value: 10000
+
+  # Backend (Node.js/Express)
+  - type: web
+    name: supply-chain-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: AI_SERVICE_URL
+        fromService:
+          name: supply-chain-ai
+          type: web
+          property: host
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        fromService:
+          name: supply-chain-frontend
+          type: web
+          property: host
+
+  # Frontend (Next.js)
+  - type: web
+    name: supply-chain-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_BACKEND_URL
+        fromService:
+          name: supply-chain-backend
+          type: web
+          property: host
+      - key: NEXT_PUBLIC_SOCKET_URL
+        fromService:
+          name: supply-chain-backend
+          type: web
+          property: host
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
