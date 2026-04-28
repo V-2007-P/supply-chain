@@ -67,9 +67,18 @@ uvicorn main:app --reload --port 8000   # http://localhost:8000
 | frontend | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | frontend | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | frontend | `NEXT_PUBLIC_BACKEND_URL` | Express API base URL |
+| frontend | `NEXT_PUBLIC_GEMINI_API_KEY` | Google Gemini API Key |
+| frontend | `GROQ_API_KEY` | Groq AI API Key |
+| frontend | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps API Key |
 | backend | `SUPABASE_URL` | Supabase project URL |
 | backend | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (bypasses RLS) |
 | backend | `AI_SERVICE_URL` | FastAPI service URL |
+
+## AI Integration
+SwiftRoute uses a dual-AI approach for maximum reliability:
+1. **Primary Analysis**: Uses **Groq (Llama 3.1)** via `/api/groq` for ultra-fast real-time risk assessments.
+2. **Fallback/Enhanced Analysis**: Uses **Google Gemini 1.5 Flash** via `/api/gemini` for deep historical pattern recognition.
+3. **Microservice**: A dedicated **FastAPI** service (`ai-service`) handles core logic for Indian highway congestion and delay calculations.
 
 ## Ports
 | Service | Port |
